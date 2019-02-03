@@ -1,0 +1,94 @@
+# Import necessary packages
+import pandas as pd 
+import numpy as np
+from sklearn.model_selection import KFold
+import matplotlib.pyplot as plt
+
+# Select features
+frame=pd.read_excel('Data.csv')
+frame['y']=frame['Actual']-frame['Due']
+frame['x1']=frame['y'].shift(1)
+frame['x2']=frame['y'].shift(3)
+for index in range(len(frame)):
+    row=frame.iloc[index,0]
+    if(row=='a'):
+        frame.iloc[index,0]=-1
+    if(row=='b'):
+        frame.iloc[index,0]=0
+    if(row=='c'):
+        frame.iloc[index,0]=1
+frame['x3']=frame['Company']
+frame=frame.dropna().reset_index(drop=True)
+frame
+
+# Regression Model
+def regression(input_frame):
+    X = np.array(input_frame.iloc[:,6:],dtype='float')
+    y = np.array(input_frame['y'],dtype='float')
+    #print(np.linalg.inv(X.T.dot(X)))
+    para = np.linalg.inv(X.T.dot(X)).dot(X.T).dot(y)
+    #print(np.linalg.inv(X.T.dot(X)))
+    return para
+
+def expand_frame(input_frame,p):
+    out_frame = input_frame.copy()
+    for total_index in range(p+1):
+        for x1_index in range(total_index+1):
+            x2_index = total_index - x1_index
+            
+            out_frame['x1^'+str(x1_index)+'x2^'+str(x2_index)]=out_frame['x1']**x1_index*out_frame['x2']**x2_index
+
+    return out_frame
+
+def cross_validation(original,p):
+    ex_frame = expand_frame(original,p)
+    index_list=ex_frame.index.tolist()
+    kf=KFold(n_splits=10)
+    loss_list=[]
+    for train_index,test_index in kf.split(index_list):
+        #print(train_index,test_index)
+        train_frame = ex_frame.iloc[train_index,:]
+        para = regression(train_frame)
+        #print(para)
+        test_frame = ex_frame.iloc[test_index,:]
+        test_X = np.array(test_frame.iloc[:,6:],dtype='float')
+        test_y = np.array(test_frame['y'],dtype='float')
+        #print(test_X.dot(para))
+        loss=np.linalg.norm(test_y-test_X.dot(para))
+        loss_list.append(loss)
+    average_loss = np.mean(loss_list)
+    return average_loss
+
+# Test accuracy
+plist=range(20)
+min_loss = 10000
+best_p = -1
+for i in plist:
+    loss=cross_validation(frame,i)
+    if(loss<min_loss):
+        min_loss = loss
+        best_p=i
+        
+def get_accuracy(original,best_p):
+    ex_frame = expand_frame(original,best_p)
+    para = regression(ex_frame)
+    X = np.array(ex_frame.iloc[:,6:],dtype='float')
+    y = np.array(ex_frame['y'],dtype='float')
+    loss = np.linalg.norm(y-X.dot(para))**2 / len(original)
+    
+    print(X.dot(para))
+    return loss
+
+# Visualization
+l=[]
+plist=range(20)
+min_loss = 10000
+best_p = -1
+for i in plist:
+    loss=cross_validation(frame,i)
+    l.append(loss)
+    if(loss<min_loss):
+        min_loss = loss
+        best_p=i
+plt.plot(plist,l)
+plt.show()
